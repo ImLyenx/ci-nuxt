@@ -1,6 +1,8 @@
+<script setup lang="ts">
+console.log("test")
+</script>
 <template>
   <div>
-    <NuxtRouteAnnouncer />
-    <NuxtWelcome />
+    SALUT
   </div>
 </template>
