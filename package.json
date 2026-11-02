@@ -20,8 +20,10 @@
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
+    "@tailwindcss/vite": "^4.3.3",
     "eslint": "^10.14.0",
     "prettier": "^3.9.10",
+    "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"
   }
 }
