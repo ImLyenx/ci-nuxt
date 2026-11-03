@@ -1,12 +1,40 @@
-name: Lint
+name: CI
 
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  eslint:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm lint
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm format:check
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm typecheck
+
+  # single gate over all checks: reports the one commit status Vercel waits on,
+  # and is what deploy depends on
+  ci:
+    needs: [lint, format, typecheck]
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -14,53 +42,28 @@ jobs:
       actions: read # lets the status step read this job's result
     steps:
       # sets "pending" now and success/failure when the job ends,
-      # so Vercel only promotes the deployment once this job passes
+      # so Vercel only promotes the deployment once every check passed
       - name: 'notify vercel'
         uses: 'vercel/repository-dispatch/actions/status@v1'
         with:
           name: 'Vercel - ci-nuxt: lint'
 
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # web postinstall runs `nuxt prepare`, which generates web/.nuxt/eslint.config.mjs
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm lint
-
-      - run: pnpm format:check
-
-      - run: pnpm typecheck
+      - name: All checks passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done
 
   deploy:
-    needs: eslint
+    needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     # don't let two pushes deploy at the same time
     concurrency: deploy
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
