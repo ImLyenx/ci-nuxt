@@ -66,6 +66,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-north-1
 
+      # before deploying, so new code never runs against an old schema
+      # (psql is preinstalled on GitHub's ubuntu runners)
+      - run: ./db/migrate.sh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - run: pnpm --filter infra exec cdk deploy CiNuxtApi CiNuxtWeb --require-approval never
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

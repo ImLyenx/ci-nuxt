@@ -62,4 +62,31 @@ app.delete('/wishlist/:id', async (c) => {
   return c.json(await getWishlist())
 })
 
+// like counts per pokedex id; no accounts, so anyone can like any number of times
+app.get('/likes/:id', async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id < 1) {
+    return c.json({ error: 'id must be a positive integer' }, 400)
+  }
+
+  const [row] = await sql<{ count: number }[]>`
+    SELECT count FROM likes WHERE pokemon_id = ${id}
+  `
+  return c.json({ id, likes: row?.count ?? 0 })
+})
+
+app.post('/likes/:id', async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id < 1) {
+    return c.json({ error: 'id must be a positive integer' }, 400)
+  }
+
+  const [row] = await sql<{ count: number }[]>`
+    INSERT INTO likes (pokemon_id, count) VALUES (${id}, 1)
+    ON CONFLICT (pokemon_id) DO UPDATE SET count = likes.count + 1
+    RETURNING count
+  `
+  return c.json({ id, likes: row!.count }, 201)
+})
+
 export default app

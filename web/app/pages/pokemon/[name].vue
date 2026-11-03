@@ -15,6 +15,27 @@ const statLabels: Record<keyof Pokemon['stats'], string> = {
 }
 
 const fr = (n: number) => n.toLocaleString('fr-FR')
+
+const { apiBase } = useRuntimeConfig().public
+
+// browser-only: the page is prerendered, the count must be live
+const { data: likes } = useFetch<{ likes: number }>(
+  () => `/likes/${pokemon.value?.id}`,
+  { baseURL: apiBase, server: false, immediate: !!pokemon.value },
+)
+const likeError = ref('')
+
+async function like() {
+  try {
+    likes.value = await $fetch(`/likes/${pokemon.value!.id}`, {
+      baseURL: apiBase,
+      method: 'POST',
+    })
+    likeError.value = ''
+  } catch {
+    likeError.value = 'API unreachable'
+  }
+}
 </script>
 <template>
   <div class="flex flex-col p-4 font-serif gap-4">
@@ -30,6 +51,14 @@ const fr = (n: number) => n.toLocaleString('fr-FR')
         <span class="text-gray-500">({{ pokemon.name.en }})</span>
       </h1>
       <p>{{ pokemon.category }}</p>
+
+      <div class="flex items-center gap-2">
+        <button class="cursor-pointer rounded border px-2" @click="like">
+          ♥ J'aime
+        </button>
+        <span v-if="likes">{{ fr(likes.likes) }}</span>
+        <span v-if="likeError" class="text-red-500">{{ likeError }}</span>
+      </div>
 
       <div class="flex gap-2">
         <span

@@ -9,7 +9,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:init": "./db/init.sh"
+    "db:migrate": "./db/migrate.sh"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
