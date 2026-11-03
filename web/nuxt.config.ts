@@ -15,4 +15,25 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  hooks: {
+    // prerender a page per pokemon; slugs come from pokeapi
+    async 'nitro:config'(nitroConfig) {
+      if (nitroConfig.dev) return
+
+      const res = await fetch('https://graphql.pokeapi.co/v1beta2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '{ pokemonspecies { name } }' }),
+      })
+      const { data } = (await res.json()) as {
+        data: { pokemonspecies: { name: string }[] }
+      }
+
+      nitroConfig.prerender ??= {}
+      nitroConfig.prerender.routes = [
+        ...(nitroConfig.prerender.routes ?? []),
+        ...data.pokemonspecies.map((s) => `/pokemon/${s.name}`),
+      ]
+    },
+  },
 })

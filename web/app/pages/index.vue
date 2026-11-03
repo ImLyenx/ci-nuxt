@@ -1,22 +1,16 @@
 <script setup lang="ts">
-type Pokemon = {
-  pokedex_id: number
-  name: { fr: string; en: string; jp: string }
-}
-
 const { apiBase } = useRuntimeConfig().public
 
-const pokemon = useState<Pokemon[]>('pokemon')
+const { data: pokemon } = await useFetch<PokemonSummary[]>('/api/pokemon', {
+  default: () => [],
+})
+// browser-only: a prerendered page would otherwise freeze the wishlist at build time
 const { data: wishlist } = await useFetch<number[]>('/wishlist', {
   baseURL: apiBase,
   default: () => [],
+  server: false,
 })
 const wishlistError = ref('')
-
-await callOnce(async () => {
-  pokemon.value = await $fetch('https://tyradex.app/api/v1/pokemon')
-  pokemon.value = pokemon.value.slice(1)
-})
 
 const search = ref('')
 
@@ -28,7 +22,7 @@ const filteredPokemon = computed(() =>
 
 const wishlistPokemon = computed(() =>
   wishlist.value
-    .map((id) => pokemon.value.find((p) => p.pokedex_id === id))
+    .map((id) => pokemon.value.find((p) => p.id === id))
     .filter((p) => p !== undefined),
 )
 
@@ -60,12 +54,12 @@ function removePokemon(id: number) {
     <div class="flex flex-col gap-4">
       <input v-model="search" placeholder="rechercher..." class="outline-1" />
       <ul>
-        <li v-for="p in filteredPokemon" :key="p.pokedex_id">
-          <NuxtLink :to="`/pokemon/${normalize(p.name.fr)}`" class="underline">
+        <li v-for="p in filteredPokemon" :key="p.id">
+          <NuxtLink :to="`/pokemon/${p.slug}`" class="underline">
             {{ p.name.fr }}
           </NuxtLink>
           <button
-            @click="addPokemon(p.pokedex_id)"
+            @click="addPokemon(p.id)"
             class="cursor-pointer underline bg-green-500"
           >
             Add
@@ -76,11 +70,11 @@ function removePokemon(id: number) {
     <ul>
       WISHLIST
       <p v-if="wishlistError" class="text-red-500">{{ wishlistError }}</p>
-      <li v-for="p in wishlistPokemon" :key="p.pokedex_id">
+      <li v-for="p in wishlistPokemon" :key="p.id">
         {{ p.name.fr }}
         <button
           class="cursor-pointer underline bg-red-500"
-          @click="removePokemon(p.pokedex_id)"
+          @click="removePokemon(p.id)"
         >
           Remove
         </button>

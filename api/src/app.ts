@@ -16,7 +16,10 @@ const app = new Hono()
 
 app.use(
   '*',
-  cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000' }),
+  // CORS_ORIGIN is a comma-separated list of allowed origins
+  cors({
+    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(','),
+  }),
 )
 
 app.get('/', (c) => c.json({ message: 'Hello Hono!' }))
