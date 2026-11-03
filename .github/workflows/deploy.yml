@@ -19,6 +19,7 @@ permissions:
 jobs:
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency: deploy-api
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +48,7 @@ jobs:
   web:
     needs: api
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency: deploy-web
     env:
       BUCKET: ${{ vars.WEB_BUCKET }}
@@ -86,6 +88,7 @@ jobs:
   smoke:
     needs: web
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: ./scripts/smoke.sh
