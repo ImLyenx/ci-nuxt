@@ -28,3 +28,5 @@ cdk.out
 
 # Wrangler cache
 .cloudflare
+.vercel
+.env*
