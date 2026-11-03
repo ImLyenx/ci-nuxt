@@ -2,6 +2,7 @@
 
 Vercel : https://ci-nuxt.vercel.app
 Cloudfront : https://d1lv2rpdnes9j1.cloudfront.net
+API : https://19993l7s6i.execute-api.eu-north-1.amazonaws.com
 
 ![coverage](https://github.com/ImLyenx/ci-nuxt/raw/badges/coverage.svg)
 
