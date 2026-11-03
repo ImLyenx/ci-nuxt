@@ -4,17 +4,14 @@ type Pokemon = {
   name: { fr: string; en: string; jp: string }
 }
 
+const { apiBase } = useRuntimeConfig().public
+
 const pokemon = useState<Pokemon[]>('pokemon')
-const wishlist = useState<number[]>('wishlist', () => [])
-
-onMounted(() => {
-  const local = localStorage.getItem('pokeWishList')
-  if (local) wishlist.value = local.split(',').map(Number)
+const { data: wishlist } = await useFetch<number[]>('/wishlist', {
+  baseURL: apiBase,
+  default: () => [],
 })
-
-watch(wishlist, (ids) => localStorage.setItem('pokeWishList', ids.join(',')), {
-  deep: true,
-})
+const wishlistError = ref('')
 
 await callOnce(async () => {
   pokemon.value = await $fetch('https://tyradex.app/api/v1/pokemon')
@@ -22,12 +19,6 @@ await callOnce(async () => {
 })
 
 const search = ref('')
-
-const normalize = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
 
 const filteredPokemon = computed(() =>
   pokemon.value
@@ -41,13 +32,27 @@ const wishlistPokemon = computed(() =>
     .filter((p) => p !== undefined),
 )
 
+// the API returns the updated wishlist, or { error } when it refuses
+async function updateWishlist(request: Promise<number[]>) {
+  try {
+    wishlist.value = await request
+    wishlistError.value = ''
+  } catch (e) {
+    const data = (e as { data?: { error?: string } }).data
+    wishlistError.value = data?.error ?? 'API unreachable'
+  }
+}
+
 function addPokemon(id: number) {
-  if (!wishlist.value.includes(id) && wishlist.value.length < 6)
-    wishlist.value.push(id)
+  updateWishlist(
+    $fetch('/wishlist', { baseURL: apiBase, method: 'POST', body: { id } }),
+  )
 }
 
 function removePokemon(id: number) {
-  wishlist.value = wishlist.value.filter((w) => w !== id)
+  updateWishlist(
+    $fetch(`/wishlist/${id}`, { baseURL: apiBase, method: 'DELETE' }),
+  )
 }
 </script>
 <template>
@@ -56,10 +61,12 @@ function removePokemon(id: number) {
       <input v-model="search" placeholder="rechercher..." class="outline-1" />
       <ul>
         <li v-for="p in filteredPokemon" :key="p.pokedex_id">
-          {{ p.name.fr }}
+          <NuxtLink :to="`/pokemon/${normalize(p.name.fr)}`" class="underline">
+            {{ p.name.fr }}
+          </NuxtLink>
           <button
             @click="addPokemon(p.pokedex_id)"
-            class="cursor-pointer underline"
+            class="cursor-pointer underline bg-green-500"
           >
             Add
           </button>
@@ -67,10 +74,12 @@ function removePokemon(id: number) {
       </ul>
     </div>
     <ul>
+      WISHLIST
+      <p v-if="wishlistError" class="text-red-500">{{ wishlistError }}</p>
       <li v-for="p in wishlistPokemon" :key="p.pokedex_id">
         {{ p.name.fr }}
         <button
-          class="cursor-pointer underline"
+          class="cursor-pointer underline bg-red-500"
           @click="removePokemon(p.pokedex_id)"
         >
           Remove
