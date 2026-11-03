@@ -83,7 +83,10 @@ function handler(event) {
     bucket.grantDelete(deployUser)
     deployUser.addToPrincipalPolicy(
       new PolicyStatement({
-        actions: ['cloudfront:CreateInvalidation'],
+        actions: [
+          'cloudfront:CreateInvalidation',
+          'cloudfront:GetInvalidation',
+        ],
         resources: [
           `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
         ],
