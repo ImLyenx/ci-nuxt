@@ -4,5 +4,7 @@ import withNuxt from './.nuxt/eslint.config.mjs'
 export default withNuxt({
   rules: {
     'no-console': ['error', { allow: ['warn', 'error'] }],
+    'no-debugger': 'error',
+    'vue/html-self-closing': 'off',
   },
 })

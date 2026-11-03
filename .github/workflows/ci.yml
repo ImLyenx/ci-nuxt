@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -30,8 +33,93 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm typecheck
 
+  i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/check-i18n.mjs
+
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - run: ./db/migrate.sh
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - run: pnpm test:coverage
+
+      - uses: davelosert/vitest-coverage-report-action@v2
+        if: always()
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage
+
+      - name: Publish coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          mkdir badge
+          node scripts/coverage-badge.mjs coverage/coverage-summary.json badge/coverage.svg
+          cd badge
+          git init -q -b badges
+          git add coverage.svg
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm coverage
+          git push -qf "$REMOTE" badges
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - run: ./db/migrate.sh
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+
   ci:
-    needs: [lint, format, typecheck]
+    needs: [lint, format, typecheck, i18n, test, build, e2e]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -54,60 +142,7 @@ jobs:
   deploy:
     needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    concurrency: deploy
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
-
-      # before deploying, so new code never runs against an old schema
-      # (psql is preinstalled on GitHub's ubuntu runners)
-      - run: ./db/migrate.sh
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      - run: pnpm --filter infra exec cdk deploy CiNuxtApi CiNuxtWeb --require-approval never
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
-
-  # static frontend: nuxt generate -> S3 -> CloudFront
-  deploy-web:
-    needs: deploy
-    runs-on: ubuntu-latest
-    concurrency: deploy-web
-    env:
-      BUCKET: ${{ vars.WEB_BUCKET }}
-      DISTRIBUTION_ID: ${{ vars.WEB_DISTRIBUTION_ID }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-
-      - run: pnpm --filter web generate
-        env:
-          NUXT_PUBLIC_API_BASE: ${{ vars.API_BASE_URL }}
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
-
-      # hashed assets never change: cache forever. everything else (html,
-      # payloads) is revalidated on each request
-      - name: Upload to S3
-        working-directory: web/.output/public
-        run: |
-          aws s3 sync _nuxt "s3://$BUCKET/_nuxt" --delete \
-            --cache-control 'public,max-age=31536000,immutable'
-          aws s3 sync . "s3://$BUCKET" --delete --exclude '_nuxt/*' \
-            --cache-control 'public,max-age=0,must-revalidate'
-
-      - name: Invalidate CloudFront
-        run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths '/*'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit

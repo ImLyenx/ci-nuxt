@@ -16,9 +16,10 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
   hooks: {
-    // prerender a page per pokemon; slugs come from pokeapi
+    // nuxt generate prerenders a page per pokemon; slugs come from pokeapi.
+    // nuxt build stays SSR
     async 'nitro:config'(nitroConfig) {
-      if (nitroConfig.dev) return
+      if (nitroConfig.dev || !nitroConfig.static) return
 
       const res = await fetch('https://graphql.pokeapi.co/v1beta2', {
         method: 'POST',

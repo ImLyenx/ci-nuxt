@@ -1,0 +1,9 @@
+{
+  "invalidId": "id must be a positive integer",
+  "alreadyInWishlist": "already in wishlist",
+  "wishlistFull": "wishlist is limited to {max}",
+  "notInWishlist": "not in wishlist",
+  "invalidVisitor": "visitor must be a uuid",
+  "alreadyLiked": "already liked",
+  "notLiked": "not liked"
+}

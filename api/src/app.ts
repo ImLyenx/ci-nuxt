@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { sql } from './db.js'
+import { translate, type MessageKey } from './i18n.js'
 
 const MAX_WISHLIST = 6
 
@@ -10,6 +13,18 @@ async function getWishlist(): Promise<number[]> {
     SELECT pokemon_id FROM wishlist ORDER BY created_at
   `
   return rows.map((r) => r.pokemon_id)
+}
+
+function fail(
+  c: Context,
+  status: ContentfulStatusCode,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+) {
+  return c.json(
+    { error: translate(c.req.header('Accept-Language'), key, params) },
+    status,
+  )
 }
 
 const app = new Hono()
@@ -33,15 +48,15 @@ app.post('/wishlist', async (c) => {
   const id = 'id' in body ? body.id : undefined
 
   if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) {
-    return c.json({ error: 'id must be a positive integer' }, 400)
+    return fail(c, 400, 'invalidId')
   }
 
   const wishlist = await getWishlist()
   if (wishlist.includes(id)) {
-    return c.json({ error: 'already in wishlist' }, 409)
+    return fail(c, 409, 'alreadyInWishlist')
   }
   if (wishlist.length >= MAX_WISHLIST) {
-    return c.json({ error: `wishlist is limited to ${MAX_WISHLIST}` }, 400)
+    return fail(c, 400, 'wishlistFull', { max: MAX_WISHLIST })
   }
 
   await sql`INSERT INTO wishlist (pokemon_id) VALUES (${id})`
@@ -51,12 +66,12 @@ app.post('/wishlist', async (c) => {
 app.delete('/wishlist/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
-    return c.json({ error: 'not in wishlist' }, 404)
+    return fail(c, 404, 'notInWishlist')
   }
 
   const deleted = await sql`DELETE FROM wishlist WHERE pokemon_id = ${id}`
   if (deleted.count === 0) {
-    return c.json({ error: 'not in wishlist' }, 404)
+    return fail(c, 404, 'notInWishlist')
   }
 
   return c.json(await getWishlist())
@@ -81,7 +96,7 @@ async function getLikes(id: number, visitor?: string) {
 app.get('/likes/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
-    return c.json({ error: 'id must be a positive integer' }, 400)
+    return fail(c, 400, 'invalidId')
   }
 
   const visitor = c.req.query('visitor')
@@ -94,13 +109,13 @@ app.get('/likes/:id', async (c) => {
 app.post('/likes/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
-    return c.json({ error: 'id must be a positive integer' }, 400)
+    return fail(c, 400, 'invalidId')
   }
 
   const body = await c.req.json<{ visitor?: unknown }>().catch(() => ({}))
   const visitor = 'visitor' in body ? body.visitor : undefined
   if (typeof visitor !== 'string' || !UUID.test(visitor)) {
-    return c.json({ error: 'visitor must be a uuid' }, 400)
+    return fail(c, 400, 'invalidVisitor')
   }
 
   const inserted = await sql`
@@ -108,7 +123,7 @@ app.post('/likes/:id', async (c) => {
     ON CONFLICT DO NOTHING
   `
   if (inserted.count === 0) {
-    return c.json({ error: 'already liked' }, 409)
+    return fail(c, 409, 'alreadyLiked')
   }
 
   return c.json(await getLikes(id, visitor), 201)
@@ -118,19 +133,19 @@ app.post('/likes/:id', async (c) => {
 app.delete('/likes/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
-    return c.json({ error: 'id must be a positive integer' }, 400)
+    return fail(c, 400, 'invalidId')
   }
 
   const visitor = c.req.query('visitor')
   if (!visitor || !UUID.test(visitor)) {
-    return c.json({ error: 'visitor must be a uuid' }, 400)
+    return fail(c, 400, 'invalidVisitor')
   }
 
   const deleted = await sql`
     DELETE FROM likes WHERE pokemon_id = ${id} AND visitor_id = ${visitor}
   `
   if (deleted.count === 0) {
-    return c.json({ error: 'not liked' }, 404)
+    return fail(c, 404, 'notLiked')
   }
 
   return c.json(await getLikes(id, visitor))

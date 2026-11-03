@@ -1,5 +1,9 @@
 <script setup lang="ts">
 const { apiBase } = useRuntimeConfig().public
+const { locale, t } = useLocale()
+const api = useApi()
+
+useSeoMeta({ title: 'PokéWishlist' })
 
 const { data: pokemon } = await useFetch<PokemonSummary[]>('/api/pokemon', {
   default: () => [],
@@ -14,71 +18,82 @@ const wishlistError = ref('')
 
 const search = ref('')
 
-const filteredPokemon = computed(() =>
-  pokemon.value
-    .filter((p) => normalize(p.name.fr).includes(normalize(search.value)))
-    .filter((p) => !wishlistPokemon.value.includes(p)),
-)
-
-const wishlistPokemon = computed(() =>
+const wishlistPokemon = computed<WishlistItem[]>(() =>
   wishlist.value
     .map((id) => pokemon.value.find((p) => p.id === id))
     .filter((p) => p !== undefined),
 )
 
-// the API returns the updated wishlist, or { error } when it refuses
-async function updateWishlist(request: Promise<number[]>) {
+const filteredPokemon = computed(() =>
+  pokemon.value
+    .filter((p) =>
+      normalize(p.name[locale.value]).includes(normalize(search.value)),
+    )
+    .filter((p) => !wishlist.value.includes(p.id)),
+)
+
+async function updateWishlist(request: () => Promise<number[]>) {
   try {
-    wishlist.value = await request
+    wishlist.value = await request()
     wishlistError.value = ''
   } catch (e) {
-    const data = (e as { data?: { error?: string } }).data
-    wishlistError.value = data?.error ?? 'API unreachable'
+    wishlistError.value = (e as Error).message
   }
 }
 
-function addPokemon(id: number) {
-  updateWishlist(
-    $fetch('/wishlist', { baseURL: apiBase, method: 'POST', body: { id } }),
+function add(item: WishlistItem) {
+  try {
+    addPokemon(wishlistPokemon.value, item)
+  } catch (e) {
+    const reason = (e as Error).message as 'duplicate' | 'full'
+    wishlistError.value = t(reason, { max: MAX_WISHLIST })
+    return
+  }
+  updateWishlist(() =>
+    api('/wishlist', { method: 'POST', body: { id: item.id } }),
   )
 }
 
-function removePokemon(id: number) {
-  updateWishlist(
-    $fetch(`/wishlist/${id}`, { baseURL: apiBase, method: 'DELETE' }),
-  )
+function remove(id: number) {
+  updateWishlist(() => api(`/wishlist/${id}`, { method: 'DELETE' }))
 }
 </script>
 <template>
-  <div class="flex p-4 font-serif gap-16">
+  <div class="flex gap-16 p-4">
     <div class="flex flex-col gap-4">
-      <input v-model="search" placeholder="rechercher..." class="outline-1" />
+      <input
+        v-model="search"
+        :placeholder="t('search')"
+        class="outline-1"
+        data-testid="search"
+      />
       <ul>
-        <li v-for="p in filteredPokemon" :key="p.id">
+        <li v-for="p in filteredPokemon" :key="p.id" data-testid="result">
           <NuxtLink :to="`/pokemon/${p.slug}`" class="underline">
-            {{ p.name.fr }}
+            {{ p.name[locale] }}
           </NuxtLink>
-          <button
-            @click="addPokemon(p.id)"
-            class="cursor-pointer underline bg-green-500"
-          >
-            Add
+          <button class="cursor-pointer bg-green-500 underline" @click="add(p)">
+            {{ t('add') }}
           </button>
         </li>
       </ul>
     </div>
-    <ul>
-      WISHLIST
-      <p v-if="wishlistError" class="text-red-500">{{ wishlistError }}</p>
-      <li v-for="p in wishlistPokemon" :key="p.id">
-        {{ p.name.fr }}
-        <button
-          class="cursor-pointer underline bg-red-500"
-          @click="removePokemon(p.id)"
-        >
-          Remove
-        </button>
-      </li>
-    </ul>
+    <div data-testid="wishlist">
+      <h2 class="uppercase">{{ t('wishlist') }}</h2>
+      <p v-if="wishlistError" class="text-red-500" data-testid="error">
+        {{ wishlistError }}
+      </p>
+      <ul>
+        <li v-for="p in wishlistPokemon" :key="p.id">
+          {{ p.name[locale] }}
+          <button
+            class="cursor-pointer bg-red-500 underline"
+            @click="remove(p.id)"
+          >
+            {{ t('remove') }}
+          </button>
+        </li>
+      </ul>
+    </div>
   </div>
 </template>

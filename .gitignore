@@ -30,3 +30,9 @@ cdk.out
 .cloudflare
 .vercel
 .env*
+
+# Tests
+coverage
+test-results
+playwright-report
+blob-report

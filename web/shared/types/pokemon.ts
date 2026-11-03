@@ -1,10 +1,12 @@
+export type Locale = 'en' | 'fr' | 'es' | 'de'
+
 export type Pokemon = {
   id: number
   slug: string // pokeapi name, url-safe: "nidoran-f", "mr-mime"
-  name: { fr: string; en: string }
-  category: string
+  name: Record<Locale, string>
+  category: Record<Locale, string>
   sprite: string | null
-  types: string[]
+  types: Record<Locale, string>[]
   stats: {
     hp: number
     attack: number
@@ -19,3 +21,5 @@ export type Pokemon = {
 
 // what the list endpoint returns for each pokemon
 export type PokemonSummary = Pick<Pokemon, 'id' | 'slug' | 'name'>
+
+export type WishlistItem = PokemonSummary

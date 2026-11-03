@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Applies db/schema_migrations/NNN_name.sql in order to DATABASE_URL (read from
-# .env). Applied versions are recorded in the schema_migrations table, so each
+# Applies db/schema_migrations/NNN_name.sql in order to DATABASE_URL (from the
+# environment, else .env). Applied versions are recorded in the schema_migrations table, so each
 # file runs once; each one runs in its own transaction.
 set -euo pipefail
 shopt -s nullglob
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-if [[ -f "$ROOT/.env" ]]; then
+if [[ -z "${DATABASE_URL:-}" && -f "$ROOT/.env" ]]; then
   set -a
   . "$ROOT/.env"
   set +a
