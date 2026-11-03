@@ -17,7 +17,9 @@ fi
 
 run() { psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q "$@"; }
 
-run -c "CREATE TABLE IF NOT EXISTS schema_migrations (
+# client_min_messages hides "already exists, skipping" notices
+run -c "SET client_min_messages TO warning;
+CREATE TABLE IF NOT EXISTS schema_migrations (
   version TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 )"
@@ -31,7 +33,8 @@ for file in "$ROOT"/db/schema_migrations/[0-9][0-9][0-9]_*.sql; do
   fi
 
   echo "applying $version"
-  run --single-transaction -f "$file" \
+  run --single-transaction -c 'SET LOCAL client_min_messages TO warning' \
+    -f "$file" \
     -c "INSERT INTO schema_migrations (version) VALUES ('$version')"
 done
 
