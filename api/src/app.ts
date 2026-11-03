@@ -62,31 +62,78 @@ app.delete('/wishlist/:id', async (c) => {
   return c.json(await getWishlist())
 })
 
-// like counts per pokedex id; no accounts, so anyone can like any number of times
+// likes per pokedex id. no accounts: the browser sends a random visitor id,
+// and each visitor can like a pokemon once
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function getLikes(id: number, visitor?: string) {
+  const [row] = await sql<{ likes: number; liked: boolean }[]>`
+    SELECT
+      count(*)::int AS likes,
+      coalesce(bool_or(visitor_id::text = ${visitor ?? ''}), false) AS liked
+    FROM likes
+    WHERE pokemon_id = ${id}
+  `
+  return { id, ...row! }
+}
+
+// GET /likes/:id?visitor=<uuid> -> { id, likes, liked }
 app.get('/likes/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
     return c.json({ error: 'id must be a positive integer' }, 400)
   }
 
-  const [row] = await sql<{ count: number }[]>`
-    SELECT count FROM likes WHERE pokemon_id = ${id}
-  `
-  return c.json({ id, likes: row?.count ?? 0 })
+  const visitor = c.req.query('visitor')
+  return c.json(
+    await getLikes(id, visitor && UUID.test(visitor) ? visitor : undefined),
+  )
 })
 
+// POST /likes/:id { visitor: <uuid> } -> { id, likes, liked }
 app.post('/likes/:id', async (c) => {
   const id = Number(c.req.param('id'))
   if (!Number.isInteger(id) || id < 1) {
     return c.json({ error: 'id must be a positive integer' }, 400)
   }
 
-  const [row] = await sql<{ count: number }[]>`
-    INSERT INTO likes (pokemon_id, count) VALUES (${id}, 1)
-    ON CONFLICT (pokemon_id) DO UPDATE SET count = likes.count + 1
-    RETURNING count
+  const body = await c.req.json<{ visitor?: unknown }>().catch(() => ({}))
+  const visitor = 'visitor' in body ? body.visitor : undefined
+  if (typeof visitor !== 'string' || !UUID.test(visitor)) {
+    return c.json({ error: 'visitor must be a uuid' }, 400)
+  }
+
+  const inserted = await sql`
+    INSERT INTO likes (pokemon_id, visitor_id) VALUES (${id}, ${visitor})
+    ON CONFLICT DO NOTHING
   `
-  return c.json({ id, likes: row!.count }, 201)
+  if (inserted.count === 0) {
+    return c.json({ error: 'already liked' }, 409)
+  }
+
+  return c.json(await getLikes(id, visitor), 201)
+})
+
+// DELETE /likes/:id?visitor=<uuid> -> { id, likes, liked }
+app.delete('/likes/:id', async (c) => {
+  const id = Number(c.req.param('id'))
+  if (!Number.isInteger(id) || id < 1) {
+    return c.json({ error: 'id must be a positive integer' }, 400)
+  }
+
+  const visitor = c.req.query('visitor')
+  if (!visitor || !UUID.test(visitor)) {
+    return c.json({ error: 'visitor must be a uuid' }, 400)
+  }
+
+  const deleted = await sql`
+    DELETE FROM likes WHERE pokemon_id = ${id} AND visitor_id = ${visitor}
+  `
+  if (deleted.count === 0) {
+    return c.json({ error: 'not liked' }, 404)
+  }
+
+  return c.json(await getLikes(id, visitor))
 })
 
 export default app

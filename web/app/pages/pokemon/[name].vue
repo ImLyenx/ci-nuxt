@@ -19,21 +19,36 @@ const fr = (n: number) => n.toLocaleString('fr-FR')
 const { apiBase } = useRuntimeConfig().public
 
 // browser-only: the page is prerendered, the count must be live
-const { data: likes } = useFetch<{ likes: number }>(
-  () => `/likes/${pokemon.value?.id}`,
-  { baseURL: apiBase, server: false, immediate: !!pokemon.value },
-)
+const visitor = import.meta.client ? useVisitorId() : ''
+
+type Likes = { likes: number; liked: boolean }
+const { data: likes } = useFetch<Likes>(() => `/likes/${pokemon.value?.id}`, {
+  baseURL: apiBase,
+  query: { visitor },
+  server: false,
+  immediate: !!pokemon.value,
+})
 const likeError = ref('')
 
-async function like() {
+// like, or unlike if this visitor already liked it
+async function toggleLike() {
+  const url = `/likes/${pokemon.value!.id}`
   try {
-    likes.value = await $fetch(`/likes/${pokemon.value!.id}`, {
-      baseURL: apiBase,
-      method: 'POST',
-    })
+    likes.value = likes.value?.liked
+      ? await $fetch<Likes>(url, {
+          baseURL: apiBase,
+          method: 'DELETE',
+          query: { visitor },
+        })
+      : await $fetch<Likes>(url, {
+          baseURL: apiBase,
+          method: 'POST',
+          body: { visitor },
+        })
     likeError.value = ''
-  } catch {
-    likeError.value = 'API unreachable'
+  } catch (e) {
+    const data = (e as { data?: { error?: string } }).data
+    likeError.value = data?.error ?? 'API unreachable'
   }
 }
 </script>
@@ -53,8 +68,14 @@ async function like() {
       <p>{{ pokemon.category }}</p>
 
       <div class="flex items-center gap-2">
-        <button class="cursor-pointer rounded border px-2" @click="like">
-          ♥ J'aime
+        <button
+          class="cursor-pointer rounded border px-2 disabled:cursor-default"
+          :class="{ 'bg-pink-100': likes?.liked }"
+          :disabled="!likes"
+          :title="likes?.liked ? 'Ne plus aimer' : undefined"
+          @click="toggleLike"
+        >
+          {{ likes?.liked ? '♥ Aimé' : "♡ J'aime" }}
         </button>
         <span v-if="likes">{{ fr(likes.likes) }}</span>
         <span v-if="likeError" class="text-red-500">{{ likeError }}</span>
